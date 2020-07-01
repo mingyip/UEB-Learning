@@ -1,3 +1,6 @@
+# Dirs
+pretrained/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -127,3 +130,14 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+# editor, os cache directory
+.vscode/
+.idea/
+__MACOSX/
+
+# outputs
+*.jpg
+*.jpeg
+*.png
+*.h5
+*.swp
