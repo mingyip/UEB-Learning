@@ -358,8 +358,9 @@ if __name__ == "__main__":
         'norm': None,
         'use_upsample_conv': True,
         'kernel_size': 3,
-        'channel_multiplier': 2
+        'channel_multiplier': 2,
+        'num_bins': 9
     }
 
-    model = UNet()
-    print(end)
+    model = UNet(unet_kwargs)
+    print(model)

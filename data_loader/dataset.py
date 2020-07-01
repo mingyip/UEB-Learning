@@ -215,9 +215,10 @@ class BaseVoxelDataset(Dataset):
             else:
                 flow = torch.zeros((2, frame.shape[-2], frame.shape[-1]), dtype=frame.dtype, device=frame.device)
 
-            item = {'frame': frame,
+            item = {'events': [xs, ys, ts, ps],
+                    'frame': frame,
                     'flow': flow,
-                    'events': voxel,
+                    'voxel': voxel,
                     'timestamp': ts_k,
                     'data_source_idx': self.data_source_idx,
                     'dt': dt}
@@ -225,14 +226,16 @@ class BaseVoxelDataset(Dataset):
             if return_frame:
                 frame, flow = self.find_ts_frame(ts_k)
 
-                item = {'frame': frame,
+                item = {'events': [xs, ys, ts, ps],
+                        'frame': frame,
                         'flow': flow,
-                        'events': voxel,
+                        'voxel': voxel,
                         'timestamp': ts_k,
                         'data_source_idx': self.data_source_idx,
                         'dt': dt}
             else:
-                item = {'events': voxel,
+                item = {'events': [xs, ys, ts, ps],
+                        'voxel': voxel,
                         'timestamp': ts_k,
                         'data_source_idx': self.data_source_idx,
                         'dt': dt}
