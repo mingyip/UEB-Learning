@@ -18,12 +18,12 @@ class EventDataLoader(DataLoader):
     """
 
     def __init__(self, 
-                    data_path, 
-                    batch_size=1, 
-                    num_workers=1, 
-                    pin_memory=True, 
-                    shuffle=True, 
-                    dataset_kwargs=None):
+                data_path, 
+                batch_size=1, 
+                num_workers=1, 
+                pin_memory=False,
+                shuffle=True, 
+                dataset_kwargs=None):
 
         print("init EventDataloader")
         if dataset_kwargs is None:
@@ -47,6 +47,7 @@ if __name__ == "__main__":
     dataset_kwargs = {'transforms': {},
                       'max_length': None,
                       'sensor_resolution': None,
+                      'preload_events': True,
                       'num_bins': 9,
                       'voxel_method': {'method': 'random_k_events',
                                        'k': 30000,
@@ -55,8 +56,14 @@ if __name__ == "__main__":
                                        'sliding_window_t': 0.1}
                       }
 
+    ev_loader = EventDataLoader('data/outdoor_day2_data.h5', 
+                                batch_size=32,
+                                num_workers=6,
+                                shuffle=True,
+                                pin_memory=False,
+                                dataset_kwargs=dataset_kwargs
+                                )
 
-    ev_loader = EventDataLoader('data/office.h5', batch_size=32, num_workers=6, shuffle=False, dataset_kwargs=dataset_kwargs)
     H, W = ev_loader.H, ev_loader.W
     crop = CropParameters(W, H, 4)
 

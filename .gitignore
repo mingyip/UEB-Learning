@@ -141,3 +141,5 @@ __MACOSX/
 *.png
 *.h5
 *.swp
+*.svg
+*.pstats

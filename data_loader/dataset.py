@@ -1,6 +1,7 @@
 from torch.utils.data import Dataset
 import numpy as np
 import random
+import time
 import torch
 import h5py
 import os
@@ -121,8 +122,8 @@ class BaseVoxelDataset(Dataset):
         """
         raise NotImplementedError
 
-    def __init__(self, data_path, transforms={}, sensor_resolution=None, num_bins=5,
-                 voxel_method=None, max_length=None, combined_voxel_channels=True):
+    def __init__(self, data_path, transforms={}, sensor_resolution=None, preload_events=True,
+                 num_bins=5, voxel_method=None, max_length=None, combined_voxel_channels=True):
 
         self.num_bins = num_bins
         self.data_path = data_path
@@ -130,6 +131,7 @@ class BaseVoxelDataset(Dataset):
         self.sensor_resolution = sensor_resolution
         self.data_source_idx = -1
         self.has_flow = False
+        self.preload_events = preload_events
 
         self.sensor_resolution, self.t0, self.tk, self.num_events, self.frame_ts, self.num_frames = \
             None, None, None, None, None, None
@@ -394,55 +396,91 @@ class DynamicH5Dataset(BaseVoxelDataset):
     """
 
     def get_frame(self, index):
-        return self.h5_file['images']['image{:09d}'.format(index)][:]
+        with h5py.File(self.h5_file_path, 'r') as h5_file:
+            frame = h5_file['images']['image{:09d}'.format(index)][:]
+        return frame
 
     def get_flow(self, index):
-        return self.h5_file['flow']['flow{:09d}'.format(index)][:]
+        with h5py.File(self.h5_file_path, 'r') as h5_file:
+            flow = h5_file['flow']['flow{:09d}'.format(index)][:]
+        return flow
 
     def get_events(self, idx0, idx1):
-        xs = self.h5_file['events/xs'][idx0:idx1]
-        ys = self.h5_file['events/ys'][idx0:idx1]
-        ts = self.h5_file['events/ts'][idx0:idx1]
-        ps = self.h5_file['events/ps'][idx0:idx1] * 2.0 - 1.0
+        if self.preload_events:
+            xs = self.xs[idx0:idx1]
+            ys = self.ys[idx0:idx1]
+            ts = self.ts[idx0:idx1]
+            ps = self.ps[idx0:idx1]
+        else:
+            with h5py.File(self.h5_file_path, 'r') as h5_file:
+                xs = h5_file['events/xs'][idx0:idx1]
+                ys = h5_file['events/ys'][idx0:idx1]
+                ts = h5_file['events/ts'][idx0:idx1]
+                ps = h5_file['events/ps'][idx0:idx1] * 2.0 - 1.0
         return xs, ys, ts, ps
 
     def get_events_by_idx(self, idx):
         idx = list(idx)
-        xs = self.h5_file['events/xs'][idx]
-        ys = self.h5_file['events/ys'][idx]
-        ts = self.h5_file['events/ts'][idx]
-        ps = self.h5_file['events/ps'][idx] * 2.0 - 1.0
+        if self.preload_events:
+            xs = self.xs[idx]
+            ys = self.ys[idx]
+            ts = self.ts[idx]
+            ps = self.ps[idx]
+        else:
+            with h5py.File(self.h5_file_path, 'r') as h5_file:
+                xs = h5_file['events/xs'][idx]
+                ys = h5_file['events/ys'][idx]
+                ts = h5_file['events/ts'][idx]
+                ps = h5_file['events/ps'][idx] * 2.0 - 1.0
         return xs, ys, ts, ps
 
+    def load_all(self):
+        start = time.time()
+        with h5py.File(self.h5_file_path, 'r') as h5_file:
+            self.xs = h5_file['events/xs'][:]
+            self.ys = h5_file['events/ys'][:]
+            self.ts = h5_file['events/ts'][:]
+            self.ps = h5_file['events/ps'][:] * 2.0 - 1.0
+        print("Finished loading events: ", time.time()-start)
+
+
     def load_data(self, data_path):
+        self.h5_file_path = data_path
+
         try:
-            self.h5_file = h5py.File(data_path, 'r')
+            h5_file = h5py.File(data_path, 'r')
         except OSError as err:
             print("Couldn't open {}: {}".format(data_path, err))
 
+        if self.preload_events:
+            self.load_all()
+
         if self.sensor_resolution is None:
-            self.sensor_resolution = self.h5_file.attrs['sensor_resolution'][0:2]
+            self.sensor_resolution = h5_file.attrs['sensor_resolution'][0:2]
         else:
             self.sensor_resolution = self.sensor_resolution[0:2]
         print("sensor resolution = {}".format(self.sensor_resolution))
-        self.has_flow = 'flow' in self.h5_file.keys() and len(self.h5_file['flow']) > 0
-        self.t0 = self.h5_file['events/ts'][0]
-        self.tk = self.h5_file['events/ts'][-1]
-        self.num_events = self.h5_file.attrs["num_events"]
-        self.num_frames = self.h5_file.attrs["num_imgs"]
+        self.has_flow = 'flow' in h5_file.keys() and len(h5_file['flow']) > 0
+        self.t0 = h5_file['events/ts'][0]
+        self.tk = h5_file['events/ts'][-1]
+        self.num_events = h5_file.attrs["num_events"]
+        self.num_frames = h5_file.attrs["num_imgs"]
 
         self.frame_ts = []
-        for img_name in self.h5_file['images']:
-            self.frame_ts.append(self.h5_file['images/{}'.format(img_name)].attrs['timestamp'])
+        for img_name in h5_file['images']:
+            self.frame_ts.append(h5_file['images/{}'.format(img_name)].attrs['timestamp'])
 
-        data_source = self.h5_file.attrs.get('source', 'unknown')
+        data_source = h5_file.attrs.get('source', 'unknown')
         try:
             self.data_source_idx = data_sources.index(data_source)
         except ValueError:
             self.data_source_idx = -1
 
+        h5_file.close()
+
     def find_ts_index(self, timestamp):
-        idx = binary_search_h5_dset(self.h5_file['events/ts'], timestamp)
+        with h5py.File(self.h5_file_path, 'r') as h5_file:
+            idx = binary_search_h5_dset(h5_file['events/ts'], timestamp)
         return idx
 
     def find_ts_frame_index(self, timestamp):
@@ -462,10 +500,11 @@ class DynamicH5Dataset(BaseVoxelDataset):
 
 
     def compute_frame_indices(self):
-        frame_indices = []
-        start_idx = 0
-        for img_name in self.h5_file['images']:
-            end_idx = self.h5_file['images/{}'.format(img_name)].attrs['event_idx']
-            frame_indices.append([start_idx, end_idx])
-            start_idx = end_idx
+        with h5py.File(self.h5_file_path, 'r') as h5_file:
+            frame_indices = []
+            start_idx = 0
+            for img_name in h5_file['images']:
+                end_idx = h5_file['images/{}'.format(img_name)].attrs['event_idx']
+                frame_indices.append([start_idx, end_idx])
+                start_idx = end_idx
         return frame_indices
