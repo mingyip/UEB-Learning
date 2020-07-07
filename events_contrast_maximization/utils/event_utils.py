@@ -118,24 +118,44 @@ def cvshow_voxel_grid(voxelgrid, cmp=cv.COLORMAP_JET):
     cv.imshow("Image", color_img)
     cv.waitKey(1)
 
-def cvshow_all(voxel, flow, frame, cmp=cv.COLORMAP_JET):
-    assert voxel.shape[1:] == frame.shape
-    assert flow.shape[1:] == frame.shape
+def cvshow_all(voxel, flow=None, frame=None, compensated=None, idx=0, cmp=cv.COLORMAP_JET):
 
-    voxel_ = cv.normalize(voxel[0], None, 0, 255, cv.NORM_MINMAX)
+    # TODO: check voxel, frame, flow shape
+    # assert voxel.shape[1:] == frame.shape
+    # assert flow.shape[1:] == frame.shape
+
+    # TODO: check datatype tensor
+    voxel_ = cv.normalize(voxel, None, 0, 255, cv.NORM_MINMAX)
     voxel_ = voxel_.astype(np.uint8)
-    voxel_[voxel[0] == 0] = 0
+    voxel_[voxel == 0] = 0
     voxel = cv.applyColorMap(voxel_, cmp)
-    flow = vis_flow(flow)
-    frame = cv.cvtColor(frame, cv.COLOR_GRAY2RGB)
-    temp = np.zeros_like(frame)
+
+    if flow is None:
+        flow = np.zeros_like(voxel)
+    else:
+        flow = vis_flow(flow)
+
+
+    if frame is None:
+        frame = np.zeros_like(voxel)
+    else:
+        frame = cv.cvtColor(frame, cv.COLOR_GRAY2RGB)
+
+    if compensated is None:
+        compensated = np.zeros_like(frame)
+    else:
+        compensated_ = cv.normalize(compensated, None, 0, 255, cv.NORM_MINMAX)
+        compensated_ = compensated_.astype(np.uint8)
+        compensated_[compensated_ == 0] = 0
+        compensated = cv.applyColorMap(compensated_, cmp)
 
 
     top = np.hstack([voxel, flow])
-    bot = np.hstack([frame, temp])
+    bot = np.hstack([compensated, frame])
     final = np.vstack([top, bot])
 
     cv.imshow("Image", final)
+    cv.imwrite("results/test001/image{:06}.png".format(idx), final)
     cv.waitKey(1)
 
 
